@@ -1,4 +1,6 @@
 import blenderproc as bproc
+import random
+import webcolors
 
 
 def create_environment_materials():
@@ -48,3 +50,20 @@ def create_object_materials():
         materials[f"{color_name}_shiny"] = shiny_material
 
     return materials
+
+
+def create_material_for_color(name, rgba, roughness):
+    mat = bproc.material.create(name)
+    mat.set_principled_shader_value("Base Color", rgba)
+    mat.set_principled_shader_value("Roughness", roughness)
+
+    return mat
+
+
+def generate_distinct_rgba():
+    css21_colors = webcolors.names("css21")
+    random_color_name = random.choice(css21_colors)
+    rgb = webcolors.name_to_rgb(random_color_name)
+    rgba = [rgb.red / 255, rgb.green / 255, rgb.blue / 255, 1.0]
+
+    return rgba
