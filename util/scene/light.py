@@ -2,9 +2,11 @@ import blenderproc as bproc
 import numpy as np
 
 
-def sample_light(poi, radius_min=1, radius_max=4, base_energy=1000):
+def sample_point_light(poi, radius_min=1, radius_max=4, base_energy=1000):
 
-    light = bproc.types.Light(light_type="POINT", name="light")
+    light = bproc.types.Light(light_type="AREA", name="light")
+
+    light.set_radius(2000000)
 
     location = bproc.sampler.shell(
         center=[0, 0, 3],

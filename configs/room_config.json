@@ -1,0 +1,56 @@
+{
+	"output": {
+		"convert_to_png": true,
+		"hdf5": true
+	},
+	"render": {
+		"samples": 128,
+		"resolution_x": 512,
+		"resolution_y": 512
+	},
+	"camera": {
+		"focal_length": 40,
+		"location": {
+			"min": [-1, -2.5, 0.5],
+			"max": [1, -1.5, 1.0]
+		},
+		"num_poses": 1
+	},
+	"light": {
+		"type": "light_surface",
+		"light_surface": {
+			"strength": {
+				"min": 2.85,
+				"max": 3.15
+			},
+			"color": [1, 1, 1, 1]
+		}
+	},
+	"room": {
+		"width": {
+			"min": 5,
+			"max": 15
+		},
+		"depth": {
+			"min": 5,
+			"max": 15
+		},
+		"height": 4
+	},
+	"objects": {
+		"size_options": {
+			"small": 0.125,
+			"medium": 0.15,
+			"big": 0.175
+		},
+		"location_rate": 0.5
+	},
+	"materials": {
+		"env": {
+			"floor": "./assets/materials/floor_mats.blend",
+			"wall": "./assets/materials/wall_mats.blend",
+			"table": "./assets/materials/table_mats.blend"
+		},
+		"objects": "./assets/materials/obj_mats.blend"
+	}
+}
