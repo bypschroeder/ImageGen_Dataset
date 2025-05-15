@@ -1,8 +1,9 @@
 import blenderproc as bproc
-import os
-import sys
+
 import argparse
+import os
 import random
+import sys
 import json
 import numpy as np
 
@@ -20,21 +21,18 @@ add_subdirs_to_sys_path(script_dir)
 
 from configs.config_loader import load_config
 from util.mat.helper import (
-    import_mats,
     adjust_material_mapping_by_scale,
+    import_mats,
 )
-from util.output.path import get_next_index
-from util.scene.base_scenes.simple_room import generate_simple_room
-from util.scene.camera import create_camera_pose, set_intrinsics, sample_camera_location
 from util.obj.mesh import create_object
-from util.output.render import (
-    prepare_output_dirs,
-    render_and_save_hdf5,
-    extract_images_from_hdf5,
-)
 from util.obj.sample_poses import generate_pose_on_table, generate_pose_under_table
+from util.output.path import get_next_index
+from util.output.render import save_image
+from util.scene.base_scenes.simple_room import generate_simple_room
+from util.scene.camera import create_camera_pose, sample_camera_location, set_intrinsics
 from util.output.metadata_builder import build_metadata
 from util.output.prompt_builder import build_scene_prompt
+
 
 # Load config
 cfg = load_config(os.path.abspath("./configs/room_config.json"))
@@ -81,31 +79,53 @@ for i in range(args.iterations):
     floor.enable_rigidbody(active=False, collision_shape="BOX")
 
     table = bproc.loader.load_blend("./assets/objects/table.blend")[0]
-    table.enable_rigidbody(active=False, collision_shape="MESH")
+    if isinstance(table, bproc.types.MeshObject):
+        table.enable_rigidbody(active=False, collision_shape="MESH")
 
     # Materials
-    floor.add_material(FLOOR_MAT)
+    if FLOOR_MAT:
+        floor.add_material(FLOOR_MAT)
     adjust_material_mapping_by_scale(floor)
-    for wall in walls:
-        wall.add_material(WALL_MAT)
-        adjust_material_mapping_by_scale(wall)
-    table.set_material(index=1, material=TABLE_MAT)
+    if WALL_MAT:
+        for wall in walls:
+            wall.add_material(WALL_MAT)
+            adjust_material_mapping_by_scale(wall)
+    if TABLE_MAT:
+        if isinstance(table, bproc.types.MeshObject):
+            table.set_material(index=1, material=TABLE_MAT)
 
     # Create Objects
     objects_on_table = []
     objects_under_table = []
 
-    for j in range(random.randint(1, 2)):
-        SHAPE = random.choice(["CUBE", "CYLINDER", "CONE"])
+    objects_metadata = []
+    for j in range(random.randint(cfg.objects.min_objects, cfg.objects.max_objects)):
+        SHAPE = random.choice(["CUBE", "CYLINDER", "CONE", "SPHERE"])
         MAT = random.choice(obj_mats)
         SIZE_OPTIONS = vars(cfg.objects.size_options)
         SIZE_NAME, SIZE_VALUE = random.choice(list(SIZE_OPTIONS.items()))
 
         obj = create_object(scale=SIZE_VALUE, shading_mode="smooth", shape=SHAPE)
 
-        obj.add_material(MAT)
+        if MAT:
+            obj.add_material(MAT)
 
         on_table = random.random() < cfg.objects.location_rate
+
+        objects_metadata.append(
+            {
+                "shape": SHAPE,
+                "size": {
+                    "name": SIZE_NAME,
+                    "value": SIZE_VALUE,
+                },
+                "material": MAT.get_name().split(".")[0] if MAT else "no material",
+                "position": {
+                    "name": "on table" if on_table else "under table",
+                    "coordinates": None,
+                },
+            }
+        )
 
         if on_table:
             objects_on_table.append(obj)
@@ -123,11 +143,14 @@ for i in range(args.iterations):
 
     for obj in all_objects:
         obj.enable_rigidbody(True)
-    # floor.enable_rigidbody(False)
 
     bproc.object.simulate_physics_and_fix_final_poses(
         min_simulation_time=2, max_simulation_time=4, check_object_interval=1
     )
+
+    for obj_metadata, obj in zip(objects_metadata, all_objects):
+        coordinates = obj.get_location()
+        obj_metadata["position"]["coordinates"] = coordinates.tolist()
 
     # Camera
     set_intrinsics(
@@ -143,39 +166,66 @@ for i in range(args.iterations):
         cam2world = create_camera_pose(poi, location)
         bproc.camera.add_camera_pose(cam2world)
 
+    camera_metadata = {
+        "resolution": {"x": cfg.render.resolution_x, "y": cfg.render.resolution_y},
+        "focal_length": cfg.camera.focal_length,
+        "point_of_interest": poi.tolist(),
+        "camera_locations": [
+            bproc.camera.get_camera_pose(i)[:3, 3].tolist()
+            for i in range(cfg.camera.num_poses)
+        ],
+    }
+
     # Light
     # light = sample_point_light(poi)
+    emission_strength = np.random.uniform(
+        cfg.light.light_surface.strength.min, cfg.light.light_surface.strength.max
+    )
+    emission_color = np.random.uniform(
+        cfg.light.light_surface.color.min, cfg.light.light_surface.color.max
+    )
     bproc.lighting.light_surface(
         [ceiling],
-        emission_strength=np.random.uniform(
-            cfg.light.light_surface.strength.min, cfg.light.light_surface.strength.max
-        ),
-        emission_color=cfg.light.light_surface.color,
+        emission_strength,
+        emission_color,
     )
+
+    light_metadata = {
+        "type": "surface",
+        "emission_strength": emission_strength,
+        "emission_color": list(emission_color),
+        "target_surface": [ceiling.get_name()],
+    }
 
     # Render
     output_path = os.path.join(args.output, next_index_str)
-    dirs = prepare_output_dirs(output_path)
+    os.makedirs(output_path)
 
-    if cfg.output.hdf5:
-        data = render_and_save_hdf5(dirs["hdf5"])
-
-    if cfg.output.convert_to_png:
-        extract_images_from_hdf5(dirs["hdf5"], dirs)
+    data = bproc.renderer.render()
+    save_image(data["colors"], output_path)
 
     # Save Metadata
-    # metadata = build_metadata(
-    #     floor, walls, table, objects_on_table, objects_under_table, ENV_DIMS
-    # )
-    # with open(
-    #     os.path.join(output_path, "metadata.json"),
-    #     "w",
-    # ) as f:
-    #     json.dump(metadata, f, indent=4)
+    metadata = build_metadata(
+        "room",
+        ENV_DIMS,
+        floor,
+        walls,
+        table,
+        camera_metadata,
+        light_metadata,
+        objects_metadata,
+    )
+    with open(
+        os.path.join(output_path, "metadata.json"),
+        "w",
+    ) as f:
+        json.dump(metadata, f, indent=4)
 
-    # # Save Prompt
-    # prompt_data = build_scene_prompt(metadata)
-    # with open(os.path.join(output_path, "prompt.json"), "w") as f:
-    #     json.dump(prompt_data, f, indent=4)
+    # Save Prompt
+    prompt_data = build_scene_prompt(
+        environment="room", objects_metadata=objects_metadata
+    )
+    with open(os.path.join(output_path, "prompt.json"), "w") as f:
+        json.dump(prompt_data, f, indent=4)
 
     bproc.clean_up(clean_up_camera=True)

@@ -17,35 +17,67 @@ def rgba_to_color_name(rgba):
     return closest_colour(rgb_255)
 
 
-def build_scene_prompt(metadata):
-    scene_data = {"prompt": "", "objects": []}
+MATERIAL_ADJECTIVES = {
+    "wood": "wooden",
+    "gold": "golden",
+    "silver": "silver",
+    "glass": "glass",
+    "plastic": "plastic",
+    "metal": "metal",
+    "leather": "leather",
+}
 
+
+def build_scene_prompt(environment, objects_metadata):
+    scene_data = {"prompt": "", "objects": []}
     position_groups = defaultdict(list)
 
-    for obj in metadata.get("objects", []):
-        color = rgba_to_color_name(obj["material"]["base_color"])
-        shape = obj["name"].lower()
-        position = obj.get("position", "somewhere")
+    for metadata in objects_metadata:
+        shape = metadata["shape"].lower()
+        size = metadata["size"]["name"]
+        material = metadata["material"].lower()
 
-        scene_data["objects"].append(
-            {"name": shape, "color": color, "position": position}
-        )
+        position_name = metadata["position"]["name"]
+        pos_parts = position_name.split(" ", 1)
+        local_preposition = pos_parts[0]
+        base = pos_parts[1] if len(pos_parts) > 1 else "surface"
 
-        position_groups[position].append(f"a {color} {shape}")
+        obj_description = {
+            "shape": shape,
+            "size": size,
+            "material": material,
+            "local_preposition": local_preposition,
+            "base": base,
+        }
+
+        scene_data["objects"].append(obj_description)
+        position_groups[position_name].append(obj_description)
 
     object_phrases = []
     for position, descriptions in position_groups.items():
-        position_parts = position.split(" ")
-        if len(descriptions) == 1:
-            object_phrases.append(
-                f"{descriptions[0]} is placed {position_parts[0]} a {position_parts[1]}"
-            )
-        else:
-            joined = " and ".join(descriptions)
-            object_phrases.append(
-                f"{joined} are placed {position_parts[0]} a {position_parts[1]}"
-            )
+        preposition = descriptions[0]["local_preposition"]
+        base = descriptions[0]["base"]
+        material_adj = MATERIAL_ADJECTIVES.get(
+            descriptions[0]["material"], descriptions[0]["material"]
+        )
 
-    scene_data["prompt"] = "In a simple room " + " and ".join(object_phrases) + "."
+        if len(descriptions) == 1:
+            d = descriptions[0]
+            phrase = f"a {d['size']} {material_adj} {d['shape']} is placed {preposition} the {base}"
+        else:
+            joined = ", ".join(
+                [
+                    f"a {d['size']} {material_adj} {d['shape']}"
+                    for d in descriptions[:-1]
+                ]
+            )
+            joined += f" and a {descriptions[-1]['size']} {descriptions[-1]['material']} {descriptions[-1]['shape']}"
+            phrase = f"{joined} are placed {preposition} the {base}"
+
+        object_phrases.append(phrase)
+
+    scene_data["prompt"] = (
+        f"In a simple {environment}, " + " and ".join(object_phrases) + "."
+    )
 
     return scene_data

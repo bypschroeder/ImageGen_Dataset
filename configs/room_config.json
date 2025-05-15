@@ -12,9 +12,9 @@
 		"focal_length": 40,
 		"location": {
 			"min": [-1, -2.5, 0.6],
-			"max": [1, -1.5, 1.2]
+			"max": [1, -1.5, 1.5]
 		},
-		"num_poses": 1
+		"num_poses": 5
 	},
 	"light": {
 		"type": "light_surface",
@@ -23,7 +23,10 @@
 				"min": 2.85,
 				"max": 3.15
 			},
-			"color": [1, 1, 1, 1]
+			"color": {
+				"min": [1, 1, 1, 1],
+				"max": [1, 0.8, 0.6, 1]
+			}
 		}
 	},
 	"room": {
@@ -38,10 +41,12 @@
 		"height": 4
 	},
 	"objects": {
+		"min_objects": 1,
+		"max_objects": 2,
 		"size_options": {
-			"small": 0.125,
+			"small": 0.1,
 			"medium": 0.15,
-			"big": 0.175
+			"big": 0.2
 		},
 		"location_rate": 0.5
 	},

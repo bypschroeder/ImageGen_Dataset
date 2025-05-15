@@ -15,7 +15,7 @@ def set_intrinsics(image_width, image_height, focal_length):
 
 def create_camera_pose(poi, location):
     rotation_matrix = bproc.camera.rotation_from_forward_vec(
-        poi - location, inplane_rot=np.random.uniform(-np.pi / 16, np.pi / 16)
+        poi - location, inplane_rot=np.random.uniform(-np.pi / 32, np.pi / 32)
     )
     cam2world = bproc.math.build_transformation_mat(location, rotation_matrix)
 
