@@ -1,11 +1,11 @@
 import blenderproc as bproc
+import bpy
 
 import argparse
 import os
 import random
 import sys
 import json
-import numpy as np
 
 
 # Add necessary subdirectories to sys path for Blender
@@ -30,6 +30,7 @@ from util.output.path import get_next_index
 from util.output.render import save_image
 from util.scene.base_scenes.simple_room import generate_simple_room
 from util.scene.camera import create_camera_pose, sample_camera_location, set_intrinsics
+from util.scene.light import setup_point_lights, setup_area_lights, setup_lights
 from util.output.metadata_builder import build_metadata
 from util.output.prompt_builder import build_scene_prompt
 
@@ -51,7 +52,9 @@ bproc.init()
 # bproc.renderer.enable_normals_output()
 # bproc.renderer.enable_depth_output(activate_antialiasing=False)
 # bproc.renderer.enable_diffuse_color_output()
-bproc.renderer.set_max_amount_of_samples(cfg.render.samples)
+bproc.renderer.set_max_amount_of_samples(cfg["render"]["samples"])
+bproc.renderer.set_denoiser("OPTIX")
+bpy.context.scene.eevee.use_raytracing = True
 
 
 for i in range(args.iterations):
@@ -59,23 +62,35 @@ for i in range(args.iterations):
     next_index_str = get_next_index(args.output)
 
     # Materials
-    floor_mats = import_mats(os.path.abspath(cfg.materials.env.floor))
-    wall_mats = import_mats(os.path.abspath(cfg.materials.env.wall))
-    table_mats = import_mats(os.path.abspath(cfg.materials.env.table))
-    obj_mats = import_mats(os.path.abspath(cfg.materials.objects))
+    floor_mats = import_mats(os.path.abspath(cfg["materials"]["env"]["floor"]))
+    wall_mats = import_mats(os.path.abspath(cfg["materials"]["env"]["wall"]))
+    table_mats = import_mats(os.path.abspath(cfg["materials"]["env"]["table"]))
+    obj_mats = import_mats(os.path.abspath(cfg["materials"]["objects"]))
+
+    tabletop_mats = [
+        mat for mat in table_mats if mat and mat.get_name().startswith("Tabletop")
+    ]
+    tableleg_mats = [
+        mat for mat in table_mats if mat and mat.get_name().startswith("Tableleg")
+    ]
 
     # Config
     ENV_DIMS = {
-        "width": random.randint(cfg.room.width.min, cfg.room.width.max),
-        "depth": random.randint(cfg.room.depth.min, cfg.room.depth.max),
-        "height": cfg.room.height,
+        "width": random.randint(
+            cfg["room"]["width"]["min"], cfg["room"]["width"]["max"]
+        ),
+        "depth": random.randint(
+            cfg["room"]["depth"]["min"], cfg["room"]["depth"]["max"]
+        ),
+        "height": cfg["room"]["height"],
     }
     FLOOR_MAT = random.choice(floor_mats)
     WALL_MAT = random.choice(wall_mats)
-    TABLE_MAT = random.choice(table_mats)
+    TABLETOP_MAT = random.choice(tabletop_mats)
+    TABLELEG_MAT = random.choice(tableleg_mats)
 
     # Setup Base Scene
-    floor, ceiling, walls = generate_simple_room(ENV_DIMS)
+    floor, walls = generate_simple_room(ENV_DIMS, room_offset_y=-1)
     floor.enable_rigidbody(active=False, collision_shape="BOX")
 
     table = bproc.loader.load_blend("./assets/objects/table.blend")[0]
@@ -90,27 +105,33 @@ for i in range(args.iterations):
         for wall in walls:
             wall.add_material(WALL_MAT)
             adjust_material_mapping_by_scale(wall)
-    if TABLE_MAT:
+    if TABLELEG_MAT:
         if isinstance(table, bproc.types.MeshObject):
-            table.set_material(index=1, material=TABLE_MAT)
+            table.set_material(index=0, material=TABLELEG_MAT)
+    if TABLETOP_MAT:
+        if isinstance(table, bproc.types.MeshObject):
+            table.set_material(index=1, material=TABLETOP_MAT)
 
     # Create Objects
     objects_on_table = []
     objects_under_table = []
 
     objects_metadata = []
-    for j in range(random.randint(cfg.objects.min_objects, cfg.objects.max_objects)):
+    for j in range(
+        random.randint(cfg["objects"]["min_objects"], cfg["objects"]["max_objects"])
+    ):
         SHAPE = random.choice(["CUBE", "CYLINDER", "CONE", "SPHERE"])
         MAT = random.choice(obj_mats)
-        SIZE_OPTIONS = vars(cfg.objects.size_options)
-        SIZE_NAME, SIZE_VALUE = random.choice(list(SIZE_OPTIONS.items()))
+        SIZE_NAME, SIZE_VALUE = random.choice(
+            list(cfg["objects"]["size_options"].items())
+        )
 
         obj = create_object(scale=SIZE_VALUE, shading_mode="smooth", shape=SHAPE)
 
         if MAT:
             obj.add_material(MAT)
 
-        on_table = random.random() < cfg.objects.location_rate
+        on_table = random.random() < cfg["objects"]["location_rate"]
 
         objects_metadata.append(
             {
@@ -134,10 +155,10 @@ for i in range(args.iterations):
 
     # Pose Objects
     if objects_on_table:
-        generate_pose_on_table(table, objects_on_table)
+        generate_pose_on_table(table, objects_on_table, margin=0.2)
 
     if objects_under_table:
-        generate_pose_under_table(table, floor, objects_under_table)
+        generate_pose_under_table(table, floor, objects_under_table, margin=0.2)
 
     all_objects = objects_on_table + objects_under_table
 
@@ -154,55 +175,41 @@ for i in range(args.iterations):
 
     # Camera
     set_intrinsics(
-        cfg.render.resolution_x, cfg.render.resolution_y, cfg.camera.focal_length
+        cfg["render"]["resolution_x"],
+        cfg["render"]["resolution_y"],
+        cfg["camera"]["focal_length"],
     )
 
     poi = bproc.object.compute_poi([table] + all_objects)
 
-    for _ in range(cfg.camera.num_poses):
+    for _ in range(cfg["camera"]["num_poses"]):
         location = sample_camera_location(
-            cfg.camera.location.min, cfg.camera.location.max
+            cfg["camera"]["location"]["min"], cfg["camera"]["location"]["max"]
         )
         cam2world = create_camera_pose(poi, location)
         bproc.camera.add_camera_pose(cam2world)
 
     camera_metadata = {
-        "resolution": {"x": cfg.render.resolution_x, "y": cfg.render.resolution_y},
-        "focal_length": cfg.camera.focal_length,
+        "resolution": {
+            "x": cfg["render"]["resolution_x"],
+            "y": cfg["render"]["resolution_y"],
+        },
+        "focal_length": cfg["camera"]["focal_length"],
         "point_of_interest": poi.tolist(),
         "camera_locations": [
             bproc.camera.get_camera_pose(i)[:3, 3].tolist()
-            for i in range(cfg.camera.num_poses)
+            for i in range(cfg["camera"]["num_poses"])
         ],
     }
 
     # Light
-    # light = sample_point_light(poi)
-    emission_strength = np.random.uniform(
-        cfg.light.light_surface.strength.min, cfg.light.light_surface.strength.max
-    )
-    emission_color = np.random.uniform(
-        cfg.light.light_surface.color.min, cfg.light.light_surface.color.max
-    )
-    bproc.lighting.light_surface(
-        [ceiling],
-        emission_strength,
-        emission_color,
-    )
-
-    light_metadata = {
-        "type": "surface",
-        "emission_strength": emission_strength,
-        "emission_color": list(emission_color),
-        "target_surface": [ceiling.get_name()],
-    }
+    lights, light_metadata = setup_lights(ENV_DIMS, table, cfg)
 
     # Render
-    output_path = os.path.join(args.output, next_index_str)
-    os.makedirs(output_path)
+    output_path = args.output
 
     data = bproc.renderer.render()
-    save_image(data["colors"], output_path)
+    save_image(data["colors"], output_path, next_index_str)
 
     # Save Metadata
     metadata = build_metadata(
@@ -216,7 +223,7 @@ for i in range(args.iterations):
         objects_metadata,
     )
     with open(
-        os.path.join(output_path, "metadata.json"),
+        os.path.join(output_path, f"{next_index_str}_metadata.json"),
         "w",
     ) as f:
         json.dump(metadata, f, indent=4)
@@ -225,7 +232,7 @@ for i in range(args.iterations):
     prompt_data = build_scene_prompt(
         environment="room", objects_metadata=objects_metadata
     )
-    with open(os.path.join(output_path, "prompt.json"), "w") as f:
+    with open(os.path.join(output_path, f"{next_index_str}_prompt.json"), "w") as f:
         json.dump(prompt_data, f, indent=4)
 
     bproc.clean_up(clean_up_camera=True)

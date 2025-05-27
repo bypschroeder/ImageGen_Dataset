@@ -8,7 +8,7 @@ def build_metadata(environment, env_dims, floor, walls, table, camera, light, ob
             "table_material": table.get_materials()[1].get_name().split(".")[0],
         },
         "camera": camera,
-        "light": light,
+        "lighting": light,
         "objects": objects,
     }
     return metadata

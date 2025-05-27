@@ -24,7 +24,7 @@ def normalize_diffuse(diffuse):
     return diffuse
 
 
-def save_image(data, out_dir, normalize_fn=None):
+def save_image(data, out_dir, next_index_str, normalize_fn=None):
     for idx, img in enumerate(data):
         array = np.squeeze(np.array(img))
 
@@ -34,4 +34,4 @@ def save_image(data, out_dir, normalize_fn=None):
             array = (array * 255).clip(0, 255).astype(np.uint8)
 
         image = Image.fromarray(array)
-        image.save(os.path.join(out_dir, f"{idx:01d}.png"))
+        image.save(os.path.join(out_dir, f"{next_index_str}_{idx:01d}.png"))
