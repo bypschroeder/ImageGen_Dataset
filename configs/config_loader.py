@@ -1,5 +1,4 @@
 import json
-from types import SimpleNamespace
 
 
 def load_config(file_path):

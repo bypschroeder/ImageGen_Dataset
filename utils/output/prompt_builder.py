@@ -1,20 +1,8 @@
-import webcolors
+import os
+import json
+
 from collections import defaultdict
-
-
-def rgba_to_color_name(rgba):
-    def closest_colour(requested_colour):
-        min_colours = {}
-        for name in webcolors.names("css21"):
-            r_c, g_c, b_c = webcolors.name_to_rgb(name)
-            rd = (r_c - requested_colour[0]) ** 2
-            gd = (g_c - requested_colour[1]) ** 2
-            bd = (b_c - requested_colour[2]) ** 2
-            min_colours[(rd + gd + bd)] = name
-        return min_colours[min(min_colours.keys())]
-
-    rgb_255 = tuple(int(x * 255) for x in rgba[:3])
-    return closest_colour(rgb_255)
+from utils.general.path import get_next_index
 
 
 MATERIAL_ADJECTIVES = {
@@ -28,7 +16,7 @@ MATERIAL_ADJECTIVES = {
 }
 
 
-def build_scene_prompt(environment, objects_metadata):
+def save_prompt(environment, objects_metadata, output_dir):
     scene_data = {"prompt": "", "objects": []}
     position_groups = defaultdict(list)
 
@@ -79,5 +67,10 @@ def build_scene_prompt(environment, objects_metadata):
     scene_data["prompt"] = (
         f"In a simple {environment}, " + " and ".join(object_phrases) + "."
     )
+
+    next_index_str = get_next_index(output_dir)
+
+    with open(os.path.join(output_dir, f"{next_index_str}_prompt.json"), "w") as f:
+        json.dump(scene_data, f, indent=4)
 
     return scene_data

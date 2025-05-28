@@ -1,0 +1,74 @@
+{
+    "render": {
+        "samples": 128,
+        "resolution_x": 512,
+        "resolution_y": 512
+    },
+    "camera": {
+        "focal_length": 40,
+        "location": {
+            "min": [-1.5, -2.5, 0.6],
+            "max": [1.5, -1.5, 1.5]
+        },
+        "num_poses": 5
+    },
+    "lighting": {
+        "hdri": {
+            "path": "./assets/hdri",
+            "rotation": 0,
+            "strenght": 1
+        },
+        "light": {
+            "type": "AREA",
+            "shape": "SQUARE",
+            "size": 2,
+            "energy": {
+                "min": 80,
+                "max": 120
+            },
+            "location_multiplier": {
+                "x": {
+                    "min": -0.5,
+                    "max": 0.5
+                },
+                "y": {
+                    "min": -0.5,
+                    "max": -0
+                },
+                "z": {
+                    "min": 0.95,
+                    "max": 0.7
+                }
+            }
+        }
+    },
+    "room": {
+        "width": {
+            "min": 5,
+            "max": 10
+        },
+        "depth": {
+            "min": 3,
+            "max": 7
+        },
+        "height": 4
+    },
+    "objects": {
+        "min_objects": 1,
+        "max_objects": 2,
+        "size_options": {
+            "small": 0.1,
+            "medium": 0.15,
+            "big": 0.2
+        },
+        "location_rate": 0.5
+    },
+    "materials": {
+        "env": {
+            "floor": "./assets/materials/floor_mats.blend",
+            "wall": "./assets/materials/wall_mats.blend",
+            "table": "./assets/materials/table_mats.blend"
+        },
+        "objects": "./assets/materials/obj_mats.blend"
+    }
+}

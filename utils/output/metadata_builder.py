@@ -1,4 +1,12 @@
-def build_metadata(environment, env_dims, floor, walls, table, camera, light, objects):
+import os
+import json
+
+from utils.general.path import get_next_index
+
+
+def save_metadata(
+    environment, env_dims, floor, walls, table, camera, light, objects, output_dir
+):
     metadata = {
         "environment": environment,
         "env_dimensions": env_dims,
@@ -11,4 +19,13 @@ def build_metadata(environment, env_dims, floor, walls, table, camera, light, ob
         "lighting": light,
         "objects": objects,
     }
+
+    next_index_str = get_next_index(output_dir)
+
+    with open(
+        os.path.join(output_dir, f"{next_index_str}_metadata.json"),
+        "w",
+    ) as f:
+        json.dump(metadata, f, indent=4)
+
     return metadata
